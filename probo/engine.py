@@ -3,7 +3,7 @@ import enum
 import numpy as np
 from scipy.stats import binom
 from scipy.stats import norm
-
+from math import log2
 
 class PricingEngine(object, metaclass=abc.ABCMeta):
     
@@ -135,6 +135,115 @@ def NaiveMonteCarloPricer(engine, option, data):
     prc = payoffT.mean() * disc
 
     return prc
+
+def BarrierPricer(engine, option, data):
+    expiry = option.expiry
+    strike = option.strike
+    (spot, rate, vol, div, barrier) = data.get_data()
+    replications = engine.replications
+    dt = expiry/engine.time_steps
+    nudt = (rate - div - 0.5*vol*vol)*dt
+    sigsdt = vol*np.sqrt(dt)
+
+    sumCt = 0
+    sumCt2 = 0
+    
+    for j in range(replications):
+        St = spot
+        Barrier_Crossed = False
+        z1 = np.random.standard_normal(size=engine.time_steps)
+        z2=-z1
+        z=np.concatenate((z1,z2))
+    
+        for i in range(engine.time_steps):
+            St = St*np.exp(nudt+sigsdt*z[i])
+            
+            if (St <= barrier):
+                Barrier_Crossed = True
+                break
+    
+        if Barrier_Crossed == True:
+            Ct=0
+    
+        else:
+            Ct = option.payoff(St)
+    
+        sumCt += Ct
+        sumCt2 += Ct * Ct
+
+    callValue = sumCt/replications*np.exp(-rate*expiry)
+    SD = np.sqrt((sumCt2 - sumCt * sumCt/replications)*np.exp(-2*rate*expiry)/(replications-1))
+    SE = SD/np.sqrt(replications)
+    
+    return (callValue, SE)
+
+def WienerBridge(expiry, num_reps, num_steps, endval):
+    num_bisect = int(log2(num_steps))
+    tjump = int(expiry)
+    ijump = int(num_steps - 1)
+
+    z = np.random.normal(size=(num_reps, num_steps+1))
+    w = np.zeros((num_reps, num_steps + 1))
+    w[:,num_steps] = endval
+
+    for k in range(num_bisect):
+        left = 0
+        i = ijump // 2 + 1    
+        right = ijump + 1
+        limit = 2 ** k
+
+        for j in range(limit):
+            a = 0.5 * (w[:,left] + w[:,right])
+            b = 0.5 * np.sqrt(tjump)
+            w[:,i] = a + b * z[:,i]
+            right += ijump + 1
+            left += ijump + 1
+            i += ijump + 1
+        
+        ijump //= 2    
+        tjump /= 2
+
+    return np.diff(w)
+
+def StratifiedSample(M = 100):
+    u = np.random.uniform(size=M)  
+    i = np.arange(M)
+    uhat = (u + i) / M
+
+    return uhat
+
+def CallPayoff(spot, strike):
+    
+    return np.maximum(spot - strike, 0.0)
+
+def StratifiedMonteCarloPricer(engine, option, data):
+    expiry = option.expiry
+    strike = option.strike
+    (spot, rate, vol, div, barrier) = data.get_data()
+    replications = engine.replications
+    uhat = StratifiedSample(replications)
+    endval = norm.ppf(uhat)
+    z = WienerBridge(expiry, replications, engine.time_steps, endval)
+    Barrier_Crossed=False
+    
+    spotT = np.zeros((replications, engine.time_steps))
+    spotT[:,0] = spot
+    
+    dt = expiry / engine.time_steps
+    drift = (rate - div - 0.5 * vol * vol) * dt
+    
+    for j in range(replications):
+        for i in range(1, engine.time_steps):
+            spotT[j,i] = spotT[j,i-1] * np.exp(drift + vol * z[j,i])
+            if (spotT[j,i] <= barrier):
+                Barrier_Crossed = True
+                break
+
+    callT = option.payoff(spotT[:,-1])
+    price = callT.mean() * np.exp(-rate * expiry)
+    SE = callT.std(ddof=1)/np.sqrt(replications)
+
+    return (price, SE)
 
 def AntitheticMonteCarloPricer(engine, option, data):
     expiry = option.expiry

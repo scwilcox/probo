@@ -4,12 +4,21 @@ class MarketData(object):
        Especially to be passed to pricing engines.
     """
 
-    def __init__(self, rate, spot, volatility, dividend):
-        self.__rate = rate
+    def __init__(self, spot, rate, volatility, dividend, barrier):
         self.__spot = spot
+        self.__rate = rate
         self.__volatility = volatility
         self.__dividend = dividend
+        self.__barrier = barrier
 
+    @property
+    def spot(self):
+        return self.__spot
+
+    @spot.setter
+    def spot(self, new_spot):
+        self.__spot = new_spot
+        
     @property
     def rate(self):
         return self.__rate
@@ -19,20 +28,12 @@ class MarketData(object):
         self.__rate = new_rate
 
     @property
-    def spot(self):
-        return self.__spot
-
-    @spot.setter
-    def spot(self, new_spot):
-        self.__spot = new_spot
-
-    @property
     def volatility(self):
         return self.__volatility
 
     @volatility.setter
     def volatility(self, new_volatility):
-        self.__volatility = new_olatility
+        self.__volatility = new_volatility
 
     @property
     def dividend(self):
@@ -41,7 +42,15 @@ class MarketData(object):
     @dividend.setter
     def dividend(self, new_yield):
         self.__dividend = new_yield
-        
+    
+    @property
+    def barrier(self):
+        return self.__barrier
+
+    @barrier.setter
+    def barrier(self, new_barrier):
+        self.__barrier = new_barrier
+    
     def get_data(self):
-        return (self.__spot, self.__rate, self.__volatility, self.__dividend)
+        return (self.__spot, self.__rate, self.__volatility, self.__dividend, self.__barrier)
     
